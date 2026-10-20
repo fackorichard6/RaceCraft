@@ -1,9 +1,8 @@
-# Publishes the game to GitHub Pages on every push to main.
-# In the repo: Settings → Pages → Source: "GitHub Actions".
+# Optional: publish with GitHub Actions instead of the gh-pages branch.
+# Only works after Settings → Pages → Source is set to "GitHub Actions"; run it by hand from the Actions tab.
+# The live site is currently served from the gh-pages branch (built files from `npx vite build --base=./`).
 name: Deploy to GitHub Pages
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
