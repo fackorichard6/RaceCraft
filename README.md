@@ -18,6 +18,7 @@ npm run preview    # serve the production build
 - **Netlify Drop** (fastest, no Git): go to https://app.netlify.com/drop and drag the unzipped folder onto the page. You get a link like `racecraft-xyz.netlify.app`. Create a free account to keep it online permanently and rename it.
 - **itch.io** (made for games): create a new project, choose *Kind of project: HTML*, upload `racecraft-site.zip`, and tick *This file will be played in the browser*. Set the viewport to 1280 × 720 and enable the fullscreen button.
 - **GitHub Pages**: push this project to a GitHub repo, then in *Settings → Pages* choose *Source: GitHub Actions*. The included workflow (`.github/workflows/deploy.yml`) builds and publishes the site on every push to `main`, at `https://<you>.github.io/<repo>/`.
+- **Cloudflare Workers** (gives `racecraft.<you>.workers.dev`): in the Cloudflare dashboard go to *Workers & Pages → Create → Import a repository*, pick this repo, and set the build command to `npx vite build --base=./` and the deploy command to `npx wrangler deploy`. `wrangler.jsonc` tells Cloudflare to serve the built `dist/` folder. Every push to `main` redeploys automatically.
 - **Cloudflare Pages / Vercel**: import the repo with build command `npx vite build --base=./` and output directory `dist`.
 
 ## Modes
