@@ -112,7 +112,7 @@ async function boot() {
   ballcam.addEventListener('change', () => {
     match.cam.ballCam = ballcam.checked;
     match.cam.save();
-    match.hud.setBallCam(match.cam.ballCam);
+    match.hud.setBallCam(match.cam.ballCam, match.ballCamKey());
   });
   match.onPauseToggle = (p) => {
     pause.classList.toggle('hidden', !p);

@@ -29,59 +29,59 @@ interface StyleSpec {
 }
 
 const STYLES: Record<CarDesign['body'], StyleSpec> = {
-  // balanced hatch-coupe, the all-rounder
+  // Octane-style: tall cabin, short sloped hood, wheels in fender pods
   striker: {
-    upper: [[-1.12, -0.38], [-1.19, -0.08], [-1.15, 0.18], [-0.95, 0.27], [-0.62, 0.6], [0.02, 0.64], [0.42, 0.32], [0.98, 0.19], [1.17, 0.04], [1.19, -0.22], [1.12, -0.38]],
-    bottom: -0.38,
-    halfWidth: 0.76,
-    window: [[-0.82, 0.29], [-0.57, 0.56], [0.0, 0.59], [0.33, 0.33]],
-    windshield: [0.03, 0.62, 0.4, 0.33],
-    rearGlass: [-0.64, 0.58, -0.93, 0.29],
-    head: [1.12, 0.06],
-    tail: [-1.16, 0.12],
-    spoiler: [-0.98, 0.27],
-    roof: [-0.3, 0.63],
-    hood: [0.7, 0.26],
+    upper: [[-1.3, -0.36], [-1.32, -0.05], [-1.26, 0.22], [-1.0, 0.32], [-0.7, 0.66], [-0.05, 0.72], [0.38, 0.4], [1.05, 0.28], [1.3, 0.1], [1.33, -0.18], [1.3, -0.36]],
+    bottom: -0.36,
+    halfWidth: 0.64,
+    window: [[-0.92, 0.31], [-0.66, 0.62], [-0.06, 0.66], [0.32, 0.4]],
+    windshield: [-0.03, 0.7, 0.36, 0.41],
+    rearGlass: [-0.72, 0.64, -0.97, 0.33],
+    head: [1.28, 0.1],
+    tail: [-1.29, 0.14],
+    spoiler: [-1.08, 0.3],
+    roof: [-0.35, 0.7],
+    hood: [0.75, 0.33],
   },
-  // long, low supercar
+  // Dominus-style: long, flat, low muscle car
   viper: {
-    upper: [[-1.16, -0.36], [-1.22, -0.1], [-1.17, 0.14], [-0.88, 0.22], [-0.46, 0.47], [0.06, 0.49], [0.46, 0.24], [1.05, 0.09], [1.24, -0.04], [1.22, -0.25], [1.14, -0.36]],
-    bottom: -0.36,
-    halfWidth: 0.79,
-    window: [[-0.72, 0.23], [-0.45, 0.44], [0.04, 0.46], [0.38, 0.26]],
-    windshield: [0.07, 0.47, 0.46, 0.24],
-    rearGlass: [-0.47, 0.46, -0.85, 0.23],
-    head: [1.17, 0.02],
-    tail: [-1.19, 0.06],
-    spoiler: [-0.92, 0.22],
-    roof: [-0.2, 0.48],
-    hood: [0.75, 0.17],
-  },
-  // tall, boxy brawler
-  brute: {
-    upper: [[-1.14, -0.34], [-1.2, 0.24], [-1.1, 0.36], [-0.93, 0.39], [-0.86, 0.79], [0.24, 0.81], [0.5, 0.42], [1.05, 0.36], [1.2, 0.24], [1.21, -0.24], [1.13, -0.34]],
+    upper: [[-1.32, -0.34], [-1.35, -0.04], [-1.3, 0.2], [-0.95, 0.26], [-0.5, 0.5], [0.1, 0.52], [0.55, 0.3], [1.2, 0.2], [1.36, 0.06], [1.37, -0.2], [1.32, -0.34]],
     bottom: -0.34,
-    halfWidth: 0.78,
-    window: [[-0.83, 0.42], [-0.81, 0.75], [0.21, 0.76], [0.44, 0.44]],
-    windshield: [0.25, 0.79, 0.49, 0.43],
-    head: [1.18, 0.22],
-    tail: [-1.18, 0.22],
-    spoiler: [-0.92, 0.79],
-    roof: [-0.3, 0.8],
-    hood: [0.8, 0.38],
+    halfWidth: 0.72,
+    window: [[-0.86, 0.25], [-0.5, 0.47], [0.08, 0.49], [0.5, 0.3]],
+    windshield: [0.12, 0.5, 0.52, 0.31],
+    rearGlass: [-0.52, 0.48, -0.9, 0.27],
+    head: [1.33, 0.03],
+    tail: [-1.33, 0.08],
+    spoiler: [-1.0, 0.25],
+    roof: [-0.2, 0.5],
+    hood: [0.85, 0.25],
   },
-  // sharp futuristic wedge with a set-back canopy
+  // Fennec-style: compact, boxy, upright
+  brute: {
+    upper: [[-1.3, -0.32], [-1.32, 0.3], [-1.2, 0.42], [-0.98, 0.45], [-0.9, 0.82], [0.3, 0.84], [0.6, 0.46], [1.15, 0.42], [1.31, 0.3], [1.32, -0.22], [1.3, -0.32]],
+    bottom: -0.32,
+    halfWidth: 0.7,
+    window: [[-0.88, 0.46], [-0.86, 0.78], [0.27, 0.79], [0.54, 0.47]],
+    windshield: [0.31, 0.82, 0.58, 0.47],
+    head: [1.3, 0.24],
+    tail: [-1.3, 0.24],
+    spoiler: [-0.96, 0.82],
+    roof: [-0.3, 0.83],
+    hood: [0.85, 0.44],
+  },
+  // Breakout-style: very low, sharp wedge
   wedge: {
-    upper: [[-1.16, -0.36], [-1.22, 0.28], [-1.06, 0.4], [-0.55, 0.57], [-0.15, 0.59], [0.3, 0.34], [1.26, -0.03], [1.26, -0.22], [1.16, -0.36]],
-    bottom: -0.36,
-    halfWidth: 0.75,
-    window: [[-0.76, 0.37], [-0.52, 0.53], [-0.16, 0.55], [0.22, 0.36]],
-    windshield: [-0.13, 0.57, 0.3, 0.34],
-    head: [1.2, -0.03],
-    tail: [-1.2, 0.3],
-    spoiler: [-1.0, 0.4],
-    roof: [-0.4, 0.58],
-    hood: [0.75, 0.15],
+    upper: [[-1.3, -0.34], [-1.33, 0.3], [-1.12, 0.42], [-0.6, 0.6], [-0.2, 0.62], [0.3, 0.36], [1.37, -0.04], [1.37, -0.22], [1.3, -0.34]],
+    bottom: -0.34,
+    halfWidth: 0.66,
+    window: [[-0.82, 0.42], [-0.58, 0.56], [-0.2, 0.58], [0.24, 0.38]],
+    windshield: [-0.17, 0.6, 0.28, 0.37],
+    head: [1.33, -0.02],
+    tail: [-1.32, 0.3],
+    spoiler: [-1.1, 0.42],
+    roof: [-0.4, 0.6],
+    hood: [0.8, 0.17],
   },
 };
 
@@ -92,7 +92,7 @@ function bodyShape(spec: StyleSpec, wheelY: number): THREE.Shape {
   const s = new THREE.Shape();
   const up = spec.upper;
   const bot = spec.bottom;
-  const ra = R + 0.11;
+  const ra = R + 0.06;
   const dy = bot - wheelY;
   const dx = Math.sqrt(Math.max(0.01, ra * ra - dy * dy));
   const a0 = Math.asin(THREE.MathUtils.clamp(dy / ra, -1, 1));
@@ -254,7 +254,7 @@ function buildWheel(style: CarDesign['wheel'], rimHex: number, caliperHex: numbe
   const pivot = new THREE.Group(); // steering
   const spin = new THREE.Group(); // rolling (about local z)
   pivot.add(spin);
-  const tw = 0.3;
+  const tw = 0.36;
   const tireProfile = [
     new THREE.Vector2(R * 0.66, -tw / 2),
     new THREE.Vector2(R * 0.9, -tw / 2),
@@ -658,6 +658,27 @@ export class CarModel {
       glow.rotation.x = -Math.PI / 2;
       glow.position.y = WHEEL_REST_Y - R + 0.03;
       this.root.add(glow);
+    }
+
+    // --- fender pods: painted arches over each wheel, Rocket League style
+    const fenderGeo = new THREE.CylinderGeometry(R + 0.09, R + 0.09, 0.42, 20, 1, true, -Math.PI * 0.62, Math.PI * 1.24);
+    fenderGeo.rotateX(Math.PI / 2);
+    const fenderMat = paint.clone();
+    fenderMat.side = THREE.DoubleSide;
+    const lipGeo = new THREE.TorusGeometry(R + 0.09, 0.03, 6, 20, Math.PI * 1.24);
+    for (const o of CAR.wheelOffsets) {
+      const side = Math.sign(o[2]);
+      const fender = new THREE.Mesh(fenderGeo, fenderMat);
+      fender.position.set(o[0], WHEEL_REST_Y + 0.03, side * (WHEEL_Z - 0.02));
+      fender.rotation.z = Math.PI; // arc over the top of the wheel, open underneath
+      fender.castShadow = true;
+      this.body.add(fender);
+      for (const zs of [-1, 1]) {
+        const lip = new THREE.Mesh(lipGeo, accent);
+        lip.position.set(o[0], WHEEL_REST_Y + 0.03, side * (WHEEL_Z - 0.02) + zs * 0.21);
+        lip.rotation.z = Math.PI / 2 - Math.PI * 0.62;
+        this.body.add(lip);
+      }
     }
 
     // --- wheels

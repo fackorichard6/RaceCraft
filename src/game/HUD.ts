@@ -1,6 +1,7 @@
 import { UU } from './Config';
 import * as THREE from 'three';
 import type { Car } from './Car';
+import { controlGuide, type Scheme } from './Input';
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, parent: HTMLElement, html = ''): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -17,30 +18,10 @@ export function formatClock(t: number, overtime: boolean) {
   return `${overtime ? '+' : ''}${m}:${r.toString().padStart(2, '0')}`;
 }
 
-// The guide lists exactly what Input.ts maps.
-const KEYBOARD_GUIDE: [string, string][] = [
-  ['W / S', 'Drive · Reverse'],
-  ['A / D', 'Steer'],
-  ['Space', 'Jump · Flip'],
-  ['Shift', 'Boost'],
-  ['Q', 'Powerslide · Air roll'],
-  ['Y', 'Ball cam'],
-  ['[ ]', 'Camera distance'],
-  ['Esc', 'Pause'],
-];
-const GAMEPAD_GUIDE: [string, string][] = [
-  ['RT / LT', 'Drive · Reverse'],
-  ['L-Stick', 'Steer · Air control'],
-  ['A', 'Jump · Flip'],
-  ['B', 'Boost'],
-  ['X', 'Powerslide · Air roll'],
-  ['Y', 'Ball cam'],
-  ['Start', 'Pause'],
-];
-
 export interface HudContext {
   gamepad: boolean;
   countdown: boolean;
+  scheme: Scheme;
 }
 
 export class HUD {
@@ -107,7 +88,7 @@ export class HUD {
     this.indicator = el('div', 'ball-indicator hidden', this.root, '<div class="arrow"></div>');
     this.replayTag = el('div', 'replay hidden', this.root, '<span class="dot"></span> REPLAY <small>Jump to skip</small>');
     this.feed = el('div', 'feed', this.root);
-    this.renderGuide(false);
+    this.renderGuide(false, 'rl');
   }
 
   show(v: boolean) {
@@ -119,11 +100,11 @@ export class HUD {
     this.guide.classList.toggle('collapsed', this.guideHidden);
   }
 
-  private renderGuide(gamepad: boolean) {
-    const mode = gamepad ? 'pad' : 'kb';
+  private renderGuide(gamepad: boolean, scheme: Scheme) {
+    const mode = gamepad ? 'pad' : scheme;
     if (mode === this.guideMode) return;
     this.guideMode = mode;
-    const list = gamepad ? GAMEPAD_GUIDE : KEYBOARD_GUIDE;
+    const list = controlGuide(scheme, gamepad);
     this.guideList.innerHTML = list.map(([k, a]) => `<div class="g-row"><kbd>${k}</kbd><span>${a}</span></div>`).join('');
   }
 
@@ -145,8 +126,8 @@ export class HUD {
     this.clock.classList.toggle('low', !overtime && t <= 30);
   }
 
-  setBallCam(on: boolean) {
-    this.camTag.innerHTML = `<span class="cam-dot"></span>${on ? 'BALL CAM' : 'CAR CAM'}<kbd>Y</kbd>`;
+  setBallCam(on: boolean, key = 'Space') {
+    this.camTag.innerHTML = `<span class="cam-dot"></span>${on ? 'BALL CAM' : 'CAR CAM'}<kbd>${key}</kbd>`;
     this.camTag.classList.toggle('on', on);
   }
 
@@ -184,9 +165,10 @@ export class HUD {
 
   /** Pick the single most useful contextual hint for the current situation. */
   private pickHint(car: Car, ctx: HudContext): string {
-    const jump = ctx.gamepad ? 'A' : 'Space';
-    const boost = ctx.gamepad ? 'B' : 'Shift';
-    const slide = ctx.gamepad ? 'X' : 'Q';
+    const rl = ctx.scheme === 'rl';
+    const jump = ctx.gamepad ? 'A' : rl ? 'Right-click' : 'Space';
+    const boost = ctx.gamepad ? 'B' : rl ? 'Left-click' : 'Shift';
+    const slide = ctx.gamepad ? 'X' : rl ? 'L-Shift' : 'C';
     if (car.demolished) return 'Demolished — respawning…';
     if (ctx.countdown) return `Hold ${boost} to boost off the line`;
     if (!car.onGround && car.wheelContacts === 0) {
@@ -206,7 +188,7 @@ export class HUD {
       this.centerTimer -= dt;
       if (this.centerTimer <= 0) this.clearMessage();
     }
-    this.renderGuide(ctx.gamepad);
+    this.renderGuide(ctx.gamepad, ctx.scheme);
     const b = Math.round(car.boost);
     if (b !== this.lastBoost || car.boosting !== this.lastBoosting) {
       this.lastBoost = b;

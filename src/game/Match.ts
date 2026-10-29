@@ -89,7 +89,7 @@ export class Match {
     this.ball.reset();
     this.particles = new Particles(scene);
     this.cam = new GameCamera(aspect);
-    this.hud.setBallCam(this.cam.ballCam);
+    this.hud.setBallCam(this.cam.ballCam, this.ballCamKey());
   }
 
   start(mode: Mode, difficulty: Difficulty) {
@@ -221,7 +221,7 @@ export class Match {
     if (actions.has('ballcam')) {
       this.cam.ballCam = !this.cam.ballCam;
       this.cam.save();
-      this.hud.setBallCam(this.cam.ballCam);
+      this.hud.setBallCam(this.cam.ballCam, this.ballCamKey());
     }
     if (actions.has('guide')) this.hud.toggleGuide();
     if (actions.has('camNear')) this.cam.setDistance(this.cam.distance - 0.5);
@@ -293,6 +293,7 @@ export class Match {
     if (this.state !== 'goal') this.ball.syncVisual(alpha, dt);
     this.arena.update(dt, this.time);
     this.particles.update(dt);
+    this.cam.lookInput = this.input.readLook();
     this.cam.update(dt, this.player, this.ball.mesh.position);
     // shadow frustum centered between the player and the ball
     const focus = this.ball.mesh.position.clone().sub(this.player.group.position).clampLength(0, 22).add(this.player.group.position);
@@ -300,6 +301,7 @@ export class Match {
     this.hud.update(dt, this.player, this.ball.mesh.position, this.cam.camera, this.state !== 'goal', {
       gamepad: this.input.usingGamepad,
       countdown: this.state === 'countdown',
+      scheme: this.input.scheme,
     });
 
     // demolition respawns
@@ -574,6 +576,10 @@ export class Match {
       winner,
       cars: this.cars.map((c) => ({ name: c.name, team: c.team, isPlayer: c.isPlayer, ...c.stats })),
     });
+  }
+
+  ballCamKey() {
+    return this.input.usingGamepad ? 'Y' : this.input.scheme === 'rl' ? 'Space' : 'Y';
   }
 
   setPaused(p: boolean) {

@@ -24,6 +24,9 @@ export class GameCamera {
   private pos = new THREE.Vector3(-20, 6, 0);
   private look = new THREE.Vector3();
   private initialized = false;
+  /** Right-stick look (-1..1), set every frame by the match. */
+  lookInput = { x: 0, y: 0 };
+  private lookYaw = 0;
 
   constructor(aspect: number) {
     this.camera = new THREE.PerspectiveCamera(this.baseFov, aspect, 0.1, 1400);
@@ -69,28 +72,40 @@ export class GameCamera {
   update(dt: number, car: Car, ballPos: THREE.Vector3, snap = false) {
     const k = snap || !this.initialized ? 1 : 0;
     const carPos = car.group.position;
-    // camera "up": follows the surface when driving on walls, world up otherwise
-    const targetUp = car.onGround && !car.demolished ? car.surfaceNormal.clone().lerp(WORLD_UP, car.surfaceNormal.y > 0.7 ? 1 : 0.15).normalize() : WORLD_UP;
-    this.up.lerp(targetUp, k || damp(car.onGround ? 5 : 2.5, dt)).normalize();
+    // camera "up": on any surface (floor, wall, ceiling) the camera rides with the car like in
+    // Rocket League; in the air it eases back to a level horizon.
+    const onSurface = car.onGround && !car.demolished;
+    const targetUp = onSurface ? car.surfaceNormal : WORLD_UP;
+    this.up.lerp(targetUp, k || damp(onSurface ? 6 : 3, dt)).normalize();
 
+    const carFwd = new THREE.Vector3(1, 0, 0).applyQuaternion(car.group.quaternion);
+    const flatFwd = carFwd.clone().addScaledVector(this.up, -carFwd.dot(this.up));
     let desiredHeading: THREE.Vector3;
     if (this.ballCam) {
-      desiredHeading = ballPos.clone().sub(carPos);
+      const toBall = ballPos.clone().sub(carPos);
+      const len = toBall.length() || 1;
+      desiredHeading = toBall.clone().addScaledVector(this.up, -toBall.dot(this.up));
+      // ball almost straight "above" the car (e.g. car on a wall, ball out in the field):
+      // there is no clear behind-direction, so lean on the car's own heading instead
+      const planar = desiredHeading.length() / len;
+      if (planar < 0.45 && flatFwd.lengthSq() > 0.05) desiredHeading.lerp(flatFwd.clone().normalize().multiplyScalar(len), 1 - planar / 0.45);
     } else {
-      desiredHeading = new THREE.Vector3(1, 0, 0).applyQuaternion(car.group.quaternion);
-      // in the air use velocity-ish direction when pointing straight up/down
-      if (Math.abs(desiredHeading.dot(this.up)) > 0.9 && car.vel.lengthSq() > 4) desiredHeading.copy(car.vel);
+      desiredHeading = flatFwd.clone();
+      // pointing straight along "up" (mid-air): use the velocity direction
+      if (desiredHeading.lengthSq() < 0.05 && car.vel.lengthSq() > 4) desiredHeading.copy(car.vel).addScaledVector(this.up, -car.vel.dot(this.up));
     }
-    desiredHeading.addScaledVector(this.up, -desiredHeading.dot(this.up));
     if (desiredHeading.lengthSq() < 1e-4) desiredHeading.copy(this.heading);
     desiredHeading.normalize();
     // keep heading on the plane and slerp it
     this.heading.addScaledVector(this.up, -this.heading.dot(this.up)).normalize();
     this.heading.lerp(desiredHeading, k || damp(this.ballCam ? 9 : 7, dt)).normalize();
 
+    // right-stick look-around swings the camera around the car
+    this.lookYaw += (this.lookInput.x * 2.6 - this.lookYaw) * damp(10, dt);
+    const view = Math.abs(this.lookYaw) > 1e-3 ? this.heading.clone().applyAxisAngle(this.up, -this.lookYaw) : this.heading;
     const speedT = Math.min(1, car.vel.length() / 40);
     const dist = this.distance + speedT * 0.4;
-    const desired = carPos.clone().addScaledVector(this.heading, -dist).addScaledVector(this.up, this.height);
+    const desired = carPos.clone().addScaledVector(view, -dist).addScaledVector(this.up, this.height);
     if (car.demolished) desired.copy(this.pos);
     this.pos.lerp(desired, k || damp(18, dt));
 
@@ -116,9 +131,23 @@ export class GameCamera {
       const carLook = carPos.clone().addScaledVector(this.up, 1.0).addScaledVector(this.heading, 3);
       lookTarget.lerp(carLook, 0.25);
     } else {
-      lookTarget = carPos.clone().addScaledVector(this.up, 1.1).addScaledVector(this.heading, 2.5);
+      lookTarget = carPos.clone().addScaledVector(this.up, 1.1).addScaledVector(view, 2.5);
     }
+    if (Math.abs(this.lookYaw) > 0.2) lookTarget = carPos.clone().addScaledVector(this.up, 1.1).addScaledVector(view, 2.5);
     if (car.demolished) lookTarget = ballPos.clone();
+    else {
+      // never let the car leave the frame: limit the angle between the view and the car
+      const dirLook = lookTarget.clone().sub(this.pos).normalize();
+      const dirCar = carPos.clone().addScaledVector(this.up, 0.3).sub(this.pos).normalize();
+      const ang = dirLook.angleTo(dirCar);
+      const maxA = THREE.MathUtils.degToRad(this.camera.fov * 0.36);
+      if (ang > maxA) {
+        const q = new THREE.Quaternion().setFromUnitVectors(dirLook, dirCar);
+        const part = new THREE.Quaternion().slerp(q, (ang - maxA) / ang);
+        dirLook.applyQuaternion(part);
+        lookTarget = this.pos.clone().addScaledVector(dirLook, Math.max(7, lookTarget.distanceTo(this.pos)));
+      }
+    }
     this.look.lerp(lookTarget, k || damp(20, dt));
     this.initialized = true;
 

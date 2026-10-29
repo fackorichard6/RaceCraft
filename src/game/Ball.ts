@@ -202,7 +202,19 @@ export class Ball {
     const vt = vrel.clone().addScaledVector(n, -vn);
     this.angVel.add(v3().crossVectors(n, vt).multiplyScalar(0.35 / R));
 
-    // Psyonix extra impulse (only on the start of a touch)
+    // Dribble assist: soft touches (low relative speed) carry the ball with the car instead of
+    // knocking it away, so ground and air dribbles are controllable. Hard hits are unchanged.
+    const soft = THREE.MathUtils.clamp(1 - relSpeed0 / BALL.dribbleSpeed, 0, 1);
+    if (soft > 0) {
+      const carVt = vCar.clone().addScaledVector(n, -vCar.dot(n));
+      const ballVt = this.vel.clone().addScaledVector(n, -this.vel.dot(n));
+      this.vel.add(carVt.sub(ballVt).multiplyScalar(0.5 * soft));
+      // keep the ball moving with the car along the contact normal (no bounce-off)
+      const sep = this.vel.dot(n) - vCar.dot(n);
+      if (sep > 0) this.vel.addScaledVector(n, -sep * 0.6 * soft);
+    }
+
+    // Psyonix extra impulse (only on the start of a touch), softened for dribble touches
     if (time - car.lastBallHit > 0.1) {
       const relSpeed = Math.min(relSpeed0, 4600 * UU);
       const dir = this.pos.clone().sub(car.pos).applyQuaternion(qi);
@@ -213,7 +225,7 @@ export class Ball {
       // a little extra forward bias for punchy, readable hits
       dir.addScaledVector(car.fwd, 0.12 * Math.max(0, car.fwd.dot(dir))).normalize();
       const scale = curveLerp(HIT_SCALE_CURVE, relSpeed / UU);
-      this.vel.addScaledVector(dir, relSpeed * scale);
+      this.vel.addScaledVector(dir, relSpeed * scale * (1 - 0.75 * soft));
     }
     car.lastBallHit = time;
     const sp = this.vel.length();

@@ -420,23 +420,6 @@ function makeGridTexture(): THREE.CanvasTexture {
   return t;
 }
 
-function makeNetTexture(): THREE.CanvasTexture {
-  const c = document.createElement('canvas');
-  c.width = c.height = 64;
-  const g = c.getContext('2d')!;
-  g.clearRect(0, 0, 64, 64);
-  g.strokeStyle = 'rgba(255,255,255,0.9)';
-  g.lineWidth = 3;
-  g.beginPath();
-  g.moveTo(0, 0);
-  g.lineTo(64, 64);
-  g.moveTo(64, 0);
-  g.lineTo(0, 64);
-  g.stroke();
-  const t = new THREE.CanvasTexture(c);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  return t;
-}
 
 function makeCrowdTexture(): THREE.CanvasTexture {
   const c = document.createElement('canvas');
@@ -536,6 +519,48 @@ function roundRectBand(hx: number, hz: number, r: number, inner: number, outer: 
   return geo;
 }
 
+const HEX_VERT = /* glsl */ `
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`;
+
+const HEX_FRAG = /* glsl */ `
+uniform vec3 uColor;
+uniform float uTime;
+uniform float uFlash;
+uniform vec2 uScale;
+uniform float uBase;
+varying vec2 vUv;
+float hexDist(vec2 p) {
+  p = abs(p);
+  return max(dot(p, normalize(vec2(1.0, 1.7320508))), p.x);
+}
+vec4 hexCoords(vec2 uv) {
+  vec2 r = vec2(1.0, 1.7320508);
+  vec2 h = r * 0.5;
+  vec2 a = mod(uv, r) - h;
+  vec2 b = mod(uv - h, r) - h;
+  vec2 gv = dot(a, a) < dot(b, b) ? a : b;
+  return vec4(gv, uv - gv);
+}
+void main() {
+  vec2 uv = vUv * uScale;
+  vec4 hc = hexCoords(uv);
+  float d = hexDist(hc.xy);
+  float edge = smoothstep(0.40, 0.49, d);
+  float cell = fract(sin(dot(hc.zw, vec2(12.9898, 78.233))) * 43758.5453);
+  float twinkle = 0.5 + 0.5 * sin(uTime * 2.2 + cell * 6.2831);
+  float scan = 1.0 - abs(fract(vUv.y - uTime * 0.22) - 0.5) * 2.0;
+  scan = pow(scan, 8.0);
+  float fill = cell > 0.92 ? 0.12 * twinkle : 0.0;
+  float a = edge * (0.45 + 0.35 * twinkle) + fill + uBase + scan * 0.3;
+  a = a * (1.0 + uFlash * 2.5) + uFlash * 0.25;
+  vec3 col = mix(uColor, vec3(1.0), edge * 0.2 + uFlash * 0.45);
+  gl_FragColor = vec4(col, clamp(a, 0.0, 1.0));
+}`;
+
 export class Arena {
   group = new THREE.Group();
   pads: BoostPad[] = [];
@@ -546,6 +571,11 @@ export class Arena {
   private ledMats: THREE.MeshBasicMaterial[] = [];
   private beams: { pivot: THREE.Group; mat: THREE.MeshBasicMaterial; base: THREE.Color; phase: number }[] = [];
   private celebrateTimer = 0;
+  private goalFieldMats: [THREE.ShaderMaterial[], THREE.ShaderMaterial[]] = [[], []];
+  private goalCoreMats: THREE.MeshBasicMaterial[] = [];
+  private goalSpinners: THREE.Object3D[] = [];
+  private goalHolos: THREE.Mesh[] = [];
+  private goalFlash: [number, number] = [0, 0];
   private celebrateTeam: 0 | 1 = 0;
 
   constructor(scene: THREE.Scene, world: RAPIER.World) {
@@ -839,7 +869,6 @@ export class Arena {
 
   private buildGoals(world: RAPIER.World) {
     const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
-    const netTex = makeNetTexture();
     const g = groups(GROUP_ARENA, 0xffff);
     for (const s of [-1, 1]) {
       const team = s < 0 ? 0 : 1;
@@ -860,67 +889,139 @@ export class Arena {
         RAPIER.ColliderDesc.cuboid(GD / 2 + 0.5, 0.5, GW + 1).setTranslation(cx, GH + 0.5, 0).setCollisionGroups(g),
         body,
       );
-      // nets
-      const netMat = new THREE.MeshBasicMaterial({
-        map: netTex.clone(),
-        color,
-        transparent: true,
-        opacity: 0.55,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-      });
-      const repeatMat = (w: number, h: number) => {
-        const m = netMat.clone();
-        m.map = netTex.clone();
-        m.map.repeat.set(w * 1.2, h * 1.2);
-        m.map.needsUpdate = true;
-        return m;
-      };
-      const back = new THREE.Mesh(new THREE.PlaneGeometry(2 * GW, GH), repeatMat(2 * GW, GH));
-      back.position.set(s * (A + GD), GH / 2, 0);
-      back.rotation.y = Math.PI / 2;
-      this.group.add(back);
-      const roof = new THREE.Mesh(new THREE.PlaneGeometry(GD, 2 * GW), repeatMat(GD, 2 * GW));
-      roof.rotation.x = Math.PI / 2;
-      roof.position.set(cx, GH, 0);
-      this.group.add(roof);
-      for (const sz of [-1, 1]) {
-        const side = new THREE.Mesh(new THREE.PlaneGeometry(GD, GH), repeatMat(GD, GH));
-        side.position.set(cx, GH / 2, sz * GW);
-        this.group.add(side);
-      }
-      // interior back glow
-      const inner = new THREE.Mesh(
-        new THREE.PlaneGeometry(2 * GW, GH),
-        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false }),
-      );
-      inner.position.set(s * (A + GD - 0.05), GH / 2, 0);
-      inner.rotation.y = Math.PI / 2;
-      this.group.add(inner);
-      // frame posts
-      const postMat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.6 });
-      for (const sz of [-1, 1]) {
-        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, GH, 12), postMat);
-        post.position.set(s * A, GH / 2, sz * GW);
-        this.group.add(post);
-      }
-      const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 2 * GW, 12), postMat);
-      bar.rotation.x = Math.PI / 2;
-      bar.position.set(s * A, GH, 0);
-      this.group.add(bar);
-      // glowing goal line
-      const line = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 2 * GW), new THREE.MeshBasicMaterial({ color }));
-      line.rotation.x = -Math.PI / 2;
-      line.position.set(s * A, 0.03, 0);
-      this.group.add(line);
-      const lineGlow = new THREE.Mesh(
-        new THREE.PlaneGeometry(3, 2 * GW),
-        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false }),
-      );
-      lineGlow.rotation.x = -Math.PI / 2;
-      lineGlow.position.set(s * A, 0.035, 0);
-      this.group.add(lineGlow);
+      this.buildGoalVisuals(s, team, color, cx);
     }
+  }
+
+  /** Futuristic goal: energy-field nets, hex frame, portal curtain, hologram banner. */
+  private buildGoalVisuals(s: number, team: 0 | 1, color: THREE.Color, cx: number) {
+    const field = (w: number, h: number, base: number) => {
+      const m = new THREE.ShaderMaterial({
+        vertexShader: HEX_VERT,
+        fragmentShader: HEX_FRAG,
+        uniforms: {
+          uColor: { value: color.clone() },
+          uTime: { value: 0 },
+          uFlash: { value: 0 },
+          uScale: { value: new THREE.Vector2(w / 2.2, h / 2.2) },
+          uBase: { value: base },
+        },
+        transparent: true,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+        toneMapped: false,
+      });
+      this.goalFieldMats[team].push(m);
+      return m;
+    };
+    // energy-field nets
+    const back = new THREE.Mesh(new THREE.PlaneGeometry(2 * GW, GH), field(2 * GW, GH, 0.05));
+    back.position.set(s * (A + GD), GH / 2, 0);
+    back.rotation.y = Math.PI / 2;
+    this.group.add(back);
+    const roof = new THREE.Mesh(new THREE.PlaneGeometry(GD, 2 * GW), field(GD, 2 * GW, 0.03));
+    roof.rotation.x = Math.PI / 2;
+    roof.position.set(cx, GH, 0);
+    this.group.add(roof);
+    for (const sz of [-1, 1]) {
+      const side = new THREE.Mesh(new THREE.PlaneGeometry(GD, GH), field(GD, GH, 0.04));
+      side.position.set(cx, GH / 2, sz * GW);
+      this.group.add(side);
+    }
+    // glowing hex floor inside the goal
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(GD, 2 * GW), field(GD, 2 * GW, 0.0));
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.set(cx, 0.05, 0);
+    this.group.add(floor);
+    // portal curtain across the goal mouth (faint; flashes on a goal)
+    const portalMat = field(2 * GW, GH, 0.0);
+    portalMat.uniforms.uBase.value = -0.25; // mostly invisible until it flashes
+    const portal = new THREE.Mesh(new THREE.PlaneGeometry(2 * GW, GH), portalMat);
+    portal.position.set(s * (A + 0.3), GH / 2, 0);
+    portal.rotation.y = Math.PI / 2;
+    this.group.add(portal);
+
+    // frame: hexagonal posts and crossbar with a white core light
+    const frameMat = new THREE.MeshStandardMaterial({ color: 0x10141f, metalness: 0.85, roughness: 0.25, emissive: color, emissiveIntensity: 0.55 });
+    const coreMat = new THREE.MeshBasicMaterial({ color: color.clone().lerp(new THREE.Color(0xffffff), 0.55), toneMapped: false });
+    this.goalCoreMats[team] = coreMat;
+    const beam = (len: number) => new THREE.CylinderGeometry(0.42, 0.42, len, 6);
+    const core = (len: number) => new THREE.BoxGeometry(0.08, len, 0.9);
+    for (const sz of [-1, 1]) {
+      const post = new THREE.Mesh(beam(GH + 0.8), frameMat);
+      post.position.set(s * A, GH / 2, sz * GW);
+      this.group.add(post);
+      const strip = new THREE.Mesh(core(GH), coreMat);
+      strip.position.set(s * (A - 0.4), GH / 2, sz * GW);
+      this.group.add(strip);
+      // corner node
+      const node = new THREE.Mesh(new THREE.OctahedronGeometry(0.95), coreMat);
+      node.position.set(s * A, GH + 0.2, sz * GW);
+      this.group.add(node);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(1.35, 0.07, 6, 24), coreMat);
+      ring.position.copy(node.position);
+      ring.rotation.y = Math.PI / 2;
+      this.group.add(ring);
+      this.goalSpinners.push(node, ring);
+    }
+    const bar = new THREE.Mesh(beam(2 * GW), frameMat);
+    bar.rotation.x = Math.PI / 2;
+    bar.position.set(s * A, GH + 0.2, 0);
+    this.group.add(bar);
+    const barCore = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.9, 2 * GW), coreMat);
+    barCore.position.set(s * (A - 0.4), GH + 0.2, 0);
+    this.group.add(barCore);
+    // outer chevron frame: angled struts flaring out from the goal
+    const strutMat = new THREE.MeshBasicMaterial({ color, toneMapped: false, transparent: true, opacity: 0.85 });
+    const flare = 3.2;
+    for (const sz of [-1, 1]) {
+      const st = new THREE.Mesh(new THREE.BoxGeometry(0.25, GH + 3, 0.25), strutMat);
+      st.position.set(s * (A - 0.6), (GH + 3) / 2, sz * (GW + flare / 2));
+      st.rotation.x = -sz * Math.atan2(flare, GH + 3);
+      this.group.add(st);
+    }
+    const topStrut = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 2 * (GW + flare)), strutMat);
+    topStrut.position.set(s * (A - 0.6), GH + 3, 0);
+    this.group.add(topStrut);
+
+    // glowing goal line
+    const line = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 2 * GW), new THREE.MeshBasicMaterial({ color, toneMapped: false }));
+    line.rotation.x = -Math.PI / 2;
+    line.position.set(s * A, 0.06, 0);
+    this.group.add(line);
+    const lineGlow = new THREE.Mesh(
+      new THREE.PlaneGeometry(3, 2 * GW),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false }),
+    );
+    lineGlow.rotation.x = -Math.PI / 2;
+    lineGlow.position.set(s * A, 0.065, 0);
+    this.group.add(lineGlow);
+
+    // hologram banner above the goal
+    const c = document.createElement('canvas');
+    c.width = 1024;
+    c.height = 192;
+    const g = c.getContext('2d')!;
+    g.font = 'italic 800 130px "Saira Condensed", Rajdhani, system-ui, sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillStyle = '#ffffff';
+    g.shadowColor = '#ffffff';
+    g.shadowBlur = 24;
+    g.fillText(team === 0 ? 'BLUE' : 'ORANGE', 512, 100);
+    g.globalCompositeOperation = 'destination-out';
+    for (let y = 0; y < 192; y += 6) g.fillRect(0, y, 1024, 2); // scanlines
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const holo = new THREE.Mesh(
+      new THREE.PlaneGeometry(22, 4.1),
+      new THREE.MeshBasicMaterial({ map: tex, color, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }),
+    );
+    holo.position.set(s * (A - 1), GH + 7, 0);
+    holo.rotation.y = -s * Math.PI / 2;
+    this.group.add(holo);
+    this.goalHolos.push(holo);
   }
 
   private buildPads() {
@@ -1064,6 +1165,8 @@ export class Arena {
   celebrate(team: 0 | 1) {
     this.celebrateTeam = team;
     this.celebrateTimer = 4;
+    // the goal that was scored IN flashes (scoring team 0 = blue scores into orange's goal)
+    this.goalFlash[team === 0 ? 1 : 0] = 1;
   }
 
   resetPads() {
@@ -1072,6 +1175,16 @@ export class Arena {
 
   update(dt: number, time: number) {
     for (const p of this.pads) p.update(dt, time);
+    for (const t of [0, 1] as const) {
+      this.goalFlash[t] = Math.max(0, this.goalFlash[t] - dt * 0.6);
+      const f = this.goalFlash[t] * (0.6 + 0.4 * Math.abs(Math.sin(time * 14)));
+      for (const m of this.goalFieldMats[t]) {
+        m.uniforms.uTime.value = time;
+        m.uniforms.uFlash.value = f;
+      }
+    }
+    for (let i = 0; i < this.goalSpinners.length; i++) this.goalSpinners[i].rotation.x = time * (i % 2 ? -0.8 : 1.2);
+    for (const h of this.goalHolos) (h.material as THREE.MeshBasicMaterial).opacity = 0.7 + 0.15 * Math.sin(time * 3) + (Math.random() < 0.02 ? -0.4 : 0);
     const party = this.celebrateTimer > 0;
     if (party) this.celebrateTimer -= dt;
     for (const m of this.ledMats) if (m.map) m.map.offset.x = (time * 0.03) % 1;

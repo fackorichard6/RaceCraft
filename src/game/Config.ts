@@ -23,15 +23,15 @@ export const WORLD_SCALE = ARENA.halfLength / 50;
 
 // Car
 export const CAR = {
-  // Hitbox matches RL's Octane (118 x 84 x 36 uu). x = forward, y = up, z = right.
-  halfExtents: { x: 1.15, y: 0.35, z: 0.8 },
+  // Hitbox: between RL's Octane and Dominus (128 x 84 x 36 uu). x = forward, y = up, z = right.
+  halfExtents: { x: 1.25, y: 0.35, z: 0.8 },
   wheelRadius: 0.36,
   suspensionRest: 0.42,
   wheelOffsets: [
-    [0.8, -0.16, -0.72],
-    [0.8, -0.16, 0.72],
-    [-0.8, -0.16, -0.72],
-    [-0.8, -0.16, 0.72],
+    [0.86, -0.16, -0.72],
+    [0.86, -0.16, 0.72],
+    [-0.86, -0.16, -0.72],
+    [-0.86, -0.16, 0.72],
   ] as [number, number, number][],
   springK: 62,
   springC: 6.2,
@@ -73,6 +73,8 @@ export const BALL = {
   maxSpeed: 6000 * UU,
   drag: 0.03,
   mass: 0.18, // relative to car mass of 1
+  /** Relative car-ball speed below which touches count as dribble touches (~600 uu/s). */
+  dribbleSpeed: 600 * UU,
 };
 
 export const MATCH_LENGTH = 300; // seconds
