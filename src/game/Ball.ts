@@ -204,7 +204,10 @@ export class Ball {
 
     // Dribble assist: soft touches (low relative speed) carry the ball with the car instead of
     // knocking it away, so ground and air dribbles are controllable. Hard hits are unchanged.
-    const soft = THREE.MathUtils.clamp(1 - relSpeed0 / BALL.dribbleSpeed, 0, 1);
+    // only when the ball sits on top of the car (roof / hood), i.e. an actual dribble
+    const onTop = THREE.MathUtils.clamp((n.dot(car.up) - 0.55) / 0.3, 0, 1);
+    // (assist is for human players only; bots play the plain hit model)
+    const soft = car.isPlayer ? THREE.MathUtils.clamp(1 - relSpeed0 / BALL.dribbleSpeed, 0, 1) * onTop : 0;
     if (soft > 0) {
       const carVt = vCar.clone().addScaledVector(n, -vCar.dot(n));
       const ballVt = this.vel.clone().addScaledVector(n, -this.vel.dot(n));

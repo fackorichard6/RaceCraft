@@ -11,43 +11,61 @@ npm run build      # type-check + production build into dist/
 npm run preview    # serve the production build
 ```
 
-## Put it on its own website
+## Deploy (Cloudflare Workers, free plan)
 
-`npm run build` (or `npx vite build --base=./`) produces a static site in `dist/`: one `index.html` plus an `assets/` folder. It needs no server code, so any static host works. A ready-made zip of that folder is `racecraft-site.zip`. All of these are free:
+The game and its multiplayer server deploy together as one Worker (`wrangler.jsonc`):
 
-- **Netlify Drop** (fastest, no Git): go to https://app.netlify.com/drop and drag the unzipped folder onto the page. You get a link like `racecraft-xyz.netlify.app`. Create a free account to keep it online permanently and rename it.
-- **itch.io** (made for games): create a new project, choose *Kind of project: HTML*, upload `racecraft-site.zip`, and tick *This file will be played in the browser*. Set the viewport to 1280 × 720 and enable the fullscreen button.
-- **GitHub Pages**: push this project to a GitHub repo, then in *Settings → Pages* choose *Source: GitHub Actions*. The included workflow (`.github/workflows/deploy.yml`) builds and publishes the site on every push to `main`, at `https://<you>.github.io/<repo>/`.
-- **Cloudflare Workers** (gives `racecraft.<you>.workers.dev`): in the Cloudflare dashboard go to *Workers & Pages → Create → Import a repository*, pick this repo, and set the build command to `npx vite build --base=./` and the deploy command to `npx wrangler deploy`. `wrangler.jsonc` tells Cloudflare to serve the built `dist/` folder. Every push to `main` redeploys automatically.
-- **Cloudflare Pages / Vercel**: import the repo with build command `npx vite build --base=./` and output directory `dist`.
+- Build command: `npx vite build --base=./`
+- Deploy command: `npx wrangler deploy`
+
+In the Cloudflare dashboard (*Workers & Pages → your Worker → Settings → Build*), connect this GitHub repository; every push to `main` then redeploys. Durable Objects with SQLite storage are included in the Workers Free plan.
+
+Local development: run `npm run dev:api` (the Worker on port 8787) and `npm run dev` (Vite on 5173, which proxies `/api` to the Worker).
 
 ## Modes
 
-- **1v1 Duel**: you against one bot.
-- **2v2 Doubles**: you and a bot teammate against two bots.
-- Bot difficulty: Rookie, Pro or All-Star.
-
-There is no online multiplayer. Everything runs locally in one browser tab.
+- **Play vs bots**: 1v1 or 2v2 (you and a bot teammate against two bots), Rookie / Pro / All-Star.
+- **Play online**: see below.
 
 ## Controls
 
-| Action | Keyboard / mouse | Gamepad |
-| --- | --- | --- |
-| Throttle / reverse | W / S (or ↑ / ↓) | RT / LT |
-| Steer | A / D (or ← / →) | Left stick |
-| Pitch / yaw (air) | W S / A D | Left stick |
-| Jump, double jump, flip (jump + direction) | Space / right mouse | A |
-| Boost | Shift / left mouse | B |
-| Powerslide, air roll (+ A/D) | Q / Ctrl | X |
-| Air roll right | E | LB / RB (left / right) |
-| Ball cam on / off | Y | Y |
-| Camera distance | [ / ] or mouse wheel | |
-| Hide / show the control guide | H | |
-| Pause (resume, restart, camera settings) | Esc / P | Start |
-| Menus without a mouse | Arrow keys to move, Enter to select, Esc to go back | D-pad / left stick, A, B |
-| Mute | M | |
+Two keyboard schemes (pick one on the main menu); gamepads always use Rocket League's default layout.
 
-Q is safer than Ctrl in a browser, because Ctrl+W closes the tab.
+| Action | Rocket League (default, mouse + keyboard) | Keyboard only | Gamepad |
+| --- | --- | --- | --- |
+| Throttle / reverse | W / S | W / S | RT / LT |
+| Steer · yaw in the air | A / D | A / D | Left stick |
+| Pitch in the air | W / S | W / S | Left stick |
+| Jump · double jump · flip (jump + direction) | Right mouse | Space | A |
+| Boost | Left mouse | Shift | B |
+| Powerslide · free air roll (+ A/D) | Left Shift | C | X |
+| Air roll left / right | Q / E | Q / E | LB / RB |
+| Ball cam on / off | Space | Y | Y |
+| Scoreboard (hold) | Tab | Tab | Back / View |
+| Look around | | | Right stick |
+| Camera distance | [ ] or mouse wheel | [ ] | |
+| Pause | Esc | Esc | Start |
+
+Menus work without a mouse: arrow keys / D-pad to move, Enter / A to select, Esc / B to go back.
+
+## Online play
+
+**Play Online** on the main menu:
+
+- **Quick Play**: 1v1 or 2v2 matchmaking. In 2v2, bots fill empty seats after 20 seconds.
+- **Private room**: create a 1v1 or 2v2 room and share its 5-letter code; friends join with the code, pick sides, and the host starts (empty seats become bots).
+- **Teams**: create a team (you get a 6-letter team code) or join one with a code. When two teammates have the Teams tab open, **Find team battle** matches you against another team in a 2v2. Results change the team rating.
+- **Leaderboard**: top players (MMR, Elo-based, starts at 1000) and top teams. Only online matches count.
+
+Players are anonymous: the browser stores a random player id and secret token (`racecraft.identity.v1` in localStorage). Clearing site data creates a new player.
+
+### How the netcode works
+
+- Each player simulates their own car locally (no input lag) and streams its state 20 times a second.
+- One player per match is the host: their browser runs the ball, score, clock, boost pads, demos and bots, and streams the world 20 times a second. Other players' cars are drawn 0.1 s in the past and interpolated.
+- When you touch the ball, your client reports the touch to the host immediately, so dribbles and shots feel responsive; between touches your ball is gently corrected toward the host's.
+- If the host leaves mid-match, the match ends for everyone (no result is recorded).
+- The server (`worker/`) is a Cloudflare Worker with two Durable Objects: `Lobby` (players, teams, leaderboard, matchmaking, stored in SQLite) and `Room` (one per match; relays messages, only lets the host send host-only messages, and reports results using its own roster so names can't be faked).
 
 ## World scale
 
@@ -99,17 +117,18 @@ The client already supports a server endpoint. API keys must stay on a server an
 
 ## Code layout
 
-- `src/main.ts`: boot, renderer, menus, pause/settings, and the garage/match render loop
+- `src/main.ts`: boot, renderer, menus, pause/settings, and the render loop
 - `src/game/Config.ts`: world scale and tuning constants
-- `src/game/Arena.ts`: analytic arena SDF (smooth suspension normals), Rapier trimesh and colliders, field texture and markings, boost pads, stadium (stands, LED boards, light beams, goal lighting, celebrations)
-- `src/game/Car.ts`: raycast-suspension car physics: drive, powerslide, boost, jumps, flips, air control, wall driving, auto-righting
-- `src/game/CarModel.ts`: procedural car models (body styles, decals, wheels, lights, spoilers, accessories)
-- `src/game/CarDesign.ts`: customization allowlists, validation, save/load
-- `src/game/Garage.ts`: garage scene and UI
-- `src/game/DesignAssistant.ts`: local Dream Car Designer plus the remote-provider hook
-- `src/game/Ball.ts`: ball body, Rocket League hit model, path prediction
-- `src/game/AI.ts`: bots (Rookie, Pro, All-Star)
-- `src/game/Match.ts`: match flow (kickoffs, clock, overtime, goals, replays, demos, stats)
-- `src/game/Camera.ts`, `HUD.ts`, `Input.ts`, `Audio.ts`, `Particles.ts`
+- `src/game/Arena.ts`: arena SDF and colliders, field, boost pads, stadium, futuristic goals
+- `src/game/Car.ts`: car physics (suspension, drive, boost, jumps, flips, air control, wall grip) and network interpolation for remote cars
+- `src/game/CarModel.ts`: procedural car models (4 body styles, fender pods, decals, wheels, lights)
+- `src/game/CarDesign.ts`, `Garage.ts`, `DesignAssistant.ts`: garage, customization and the Dream Car Designer
+- `src/game/Ball.ts`: ball, Rocket League hit model, dribble assist, path prediction
+- `src/game/AI.ts`: bots
+- `src/game/Match.ts`: match flow, offline and online (host / client roles)
+- `src/game/Camera.ts`, `HUD.ts`, `Input.ts`, `MenuNav.ts`, `Audio.ts`, `Particles.ts`
+- `src/net/protocol.ts`, `src/net/api.ts`: shared message types and the client API
+- `src/ui/Online.ts`: online menu (quick play, rooms, teams, leaderboard)
+- `worker/`: Cloudflare Worker (`index.ts`), `Lobby` and `Room` Durable Objects
 
 Physics runs at a fixed 120 Hz step, and rendering interpolates between steps.

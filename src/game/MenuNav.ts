@@ -3,7 +3,7 @@
 // screen (spatially: "right" goes to the nearest control to the right), Enter / Space /
 // gamepad A activate it, Esc / gamepad B go back. The mouse keeps working as usual.
 
-const OVERLAYS = ['pause', 'end', 'garage', 'menu'] as const;
+const OVERLAYS = ['pause', 'end', 'garage', 'online', 'menu'] as const;
 const FOCUSABLE = 'button:not(:disabled), input:not([type=hidden]), textarea, select';
 
 type Dir = 'up' | 'down' | 'left' | 'right';

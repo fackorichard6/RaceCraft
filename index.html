@@ -38,6 +38,13 @@
             </div>
           </div>
           <div class="row">
+            <div class="label">CONTROLS</div>
+            <div class="seg" data-group="scheme">
+              <button type="button" data-v="rl" class="sel">Rocket League</button>
+              <button type="button" data-v="keyboard">Keyboard only</button>
+            </div>
+          </div>
+          <div class="row">
             <div class="label">BOTS</div>
             <div class="seg" data-group="diff">
               <button type="button" data-v="rookie">Rookie</button>
@@ -46,45 +53,68 @@
             </div>
           </div>
           <div class="menu-actions">
-            <button type="button" id="play" class="play" data-default>PLAY</button>
+            <button type="button" id="play" class="play" data-default>PLAY VS BOTS</button>
+            <button type="button" id="open-online" class="secondary online-btn">
+              <span>PLAY ONLINE</span><small>Quick play · Private rooms · Teams · Leaderboard</small>
+            </button>
             <button type="button" id="open-garage" class="secondary garage-btn">
               <span>GARAGE</span><small>Customize your car · Dream Car Designer</small>
             </button>
           </div>
           <p class="menu-note">No mouse needed: <kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> or D-pad to move, <kbd>Enter</kbd> or <kbd>A</kbd> to select, <kbd>Esc</kbd> or <kbd>B</kbd> to go back.<br />2v2 is you and a bot teammate against two bots.</p>
         </div>
-        <div class="menu-controls">
-          <div class="col">
-            <h3>KEYBOARD</h3>
-            <table>
-              <tr><td>W / S</td><td>Throttle / Reverse · Pitch (air)</td></tr>
-              <tr><td>A / D</td><td>Steer · Yaw (air)</td></tr>
-              <tr><td>Space</td><td>Jump · Double jump · Flip (+ direction)</td></tr>
-              <tr><td>Shift / Left mouse</td><td>Boost</td></tr>
-              <tr><td>Q / Ctrl</td><td>Powerslide · Air roll (+ A/D)</td></tr>
-              <tr><td>E</td><td>Air roll right</td></tr>
-              <tr><td>Y</td><td>Ball cam on / off</td></tr>
-              <tr><td>[ ] / Wheel</td><td>Camera distance</td></tr>
-              <tr><td>H</td><td>Hide / show control guide</td></tr>
-              <tr><td>Esc / P</td><td>Pause · Restart</td></tr>
-              <tr><td>M</td><td>Mute</td></tr>
-            </table>
+        <div class="menu-controls" id="menu-controls"></div>
+      </div>
+    </div>
+
+    <!-- Online -->
+    <div id="online" class="overlay menu online hidden">
+      <div class="menu-card online-card">
+        <header class="on-top">
+          <button type="button" id="on-back" class="g-btn">← Menu</button>
+          <h2>PLAY ONLINE</h2>
+          <div class="on-profile">
+            <label for="on-name">Your name</label>
+            <input id="on-name" maxlength="16" autocomplete="off" />
+            <button type="button" id="on-name-save" class="g-btn">Save</button>
+            <span id="on-rank" class="on-rank"></span>
           </div>
-          <div class="col">
-            <h3>GAMEPAD</h3>
-            <table>
-              <tr><td>RT / LT</td><td>Throttle / Reverse</td></tr>
-              <tr><td>Left stick</td><td>Steer · Air control</td></tr>
-              <tr><td>A</td><td>Jump · Flip</td></tr>
-              <tr><td>B</td><td>Boost</td></tr>
-              <tr><td>X</td><td>Powerslide · Air roll</td></tr>
-              <tr><td>LB / RB</td><td>Directional air roll</td></tr>
-              <tr><td>Y</td><td>Ball cam</td></tr>
-              <tr><td>Start</td><td>Pause</td></tr>
-            </table>
-            <p class="tip">Q is safer than Ctrl in a browser: Ctrl+W closes the tab.</p>
+        </header>
+        <div id="on-status" class="on-status" role="status" aria-live="polite"></div>
+        <nav id="on-tabs" class="on-tabs">
+          <button type="button" class="on-tab sel" data-tab="play" data-default>Play</button>
+          <button type="button" class="on-tab" data-tab="teams">Teams</button>
+          <button type="button" class="on-tab" data-tab="board">Leaderboard</button>
+        </nav>
+        <section data-pane="play">
+          <div class="on-cols">
+            <div class="on-col">
+              <h3>QUICK PLAY</h3>
+              <p id="on-qstate" class="on-muted"></p>
+              <div class="on-row">
+                <button type="button" id="on-q1" class="play">1v1</button>
+                <button type="button" id="on-q2" class="play">2v2</button>
+              </div>
+              <button type="button" id="on-qcancel" class="secondary hidden">Stop searching</button>
+            </div>
+            <div class="on-col">
+              <h3>PRIVATE ROOM</h3>
+              <p class="on-muted">Create a room and send the code to your friends. Empty seats are filled with bots.</p>
+              <div class="on-row">
+                <button type="button" id="on-create1" class="g-btn primary">Create 1v1 room</button>
+                <button type="button" id="on-create2" class="g-btn primary">Create 2v2 room</button>
+              </div>
+              <div class="on-row">
+                <label for="on-code" class="sr-only">Room code</label>
+                <input id="on-code" maxlength="5" placeholder="Room code" autocomplete="off" />
+                <button type="button" id="on-join" class="g-btn">Join</button>
+              </div>
+            </div>
           </div>
-        </div>
+        </section>
+        <section data-pane="teams" id="on-teams" class="hidden"></section>
+        <section data-pane="board" id="on-board" class="hidden"></section>
+        <section id="on-room" class="hidden"></section>
       </div>
     </div>
 
@@ -94,6 +124,7 @@
         <h2>PAUSED</h2>
         <button type="button" id="resume" class="play" data-default>RESUME</button>
         <button type="button" id="restart" class="secondary">RESTART MATCH</button>
+        <p id="pause-note" class="on-muted hidden">Online matches keep running while this menu is open.</p>
         <div class="settings">
           <label for="set-dist">Camera distance <output id="set-dist-v"></output></label>
           <input type="range" id="set-dist" min="5" max="12" step="0.25" />
@@ -109,6 +140,7 @@
     <div id="end" class="overlay menu hidden">
       <div class="menu-card">
         <h2 id="end-title">VICTORY</h2>
+        <p id="end-note" class="on-muted" style="text-align:center"></p>
         <div class="final-score"><span class="b" id="end-blue">0</span><span class="dash">–</span><span class="o" id="end-orange">0</span></div>
         <div class="stats-wrap"><table class="stats" id="end-stats"></table></div>
         <div class="end-buttons">

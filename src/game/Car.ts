@@ -6,6 +6,10 @@ import { CarModel } from './CarModel';
 import { arenaNormal, arenaRaycast, arenaSdf, GROUP_ARENA, GROUP_CAR, groups } from './Arena';
 import { Controls, emptyControls } from './Input';
 import { Particles } from './Particles';
+import { CAR_STATE_LEN, FLAG_BOOST, FLAG_DEMOLISHED, FLAG_GROUND, FLAG_SUPERSONIC, packNumbers } from '../net/protocol';
+
+/** Remote cars are drawn this far in the past so there are always two snapshots to blend. */
+const NET_DELAY = 0.1;
 
 const X = new THREE.Vector3(1, 0, 0);
 const Y = new THREE.Vector3(0, 1, 0);
@@ -61,6 +65,13 @@ export class Car {
   respawnTimer = 0;
   frozen = false;
   lastBallHit = -10;
+  /** Network id (online matches). */
+  netId = '';
+  /** Driven by network snapshots instead of local physics (other players, or host bots on clients). */
+  remote = false;
+  /** Gone from the match (player disconnected). */
+  absent = false;
+  private netBuf: { t: number; s: number[] }[] = [];
 
   private prevJump = false;
   private jumping = false;
@@ -224,10 +235,87 @@ export class Car {
     return this.dodgeTimer >= 0;
   }
 
+  // ------------------------------------------------------------------ networking
+  setRemote(on: boolean) {
+    this.remote = on;
+    this.body.setBodyType(on ? RAPIER.RigidBodyType.KinematicPositionBased : RAPIER.RigidBodyType.Dynamic, true);
+  }
+
+  /** Compact state for the network. */
+  netState(): number[] {
+    const flags = (this.boosting ? FLAG_BOOST : 0) | (this.supersonic ? FLAG_SUPERSONIC : 0) | (this.onGround ? FLAG_GROUND : 0) | (this.demolished ? FLAG_DEMOLISHED : 0);
+    const p = this.pos, q = this.quat, v = this.vel, w = this.angVel;
+    return packNumbers([p.x, p.y, p.z, q.x, q.y, q.z, q.w, v.x, v.y, v.z, w.x, w.y, w.z, this.boost, flags, this.controls.steer]);
+  }
+
+  pushNetState(s: number[], now: number) {
+    if (!Array.isArray(s) || s.length < CAR_STATE_LEN || !s.every((x) => Number.isFinite(x))) return;
+    const last = this.netBuf[this.netBuf.length - 1];
+    // big jump (kickoff, respawn): don't blend across it
+    if (last && Math.hypot(s[0] - last.s[0], s[1] - last.s[1], s[2] - last.s[2]) > 15) this.netBuf.length = 0;
+    this.netBuf.push({ t: now, s });
+    if (this.netBuf.length > 40) this.netBuf.splice(0, this.netBuf.length - 40);
+  }
+
+  private remoteStep(now: number) {
+    const buf = this.netBuf;
+    if (!buf.length) return;
+    const rt = now - NET_DELAY;
+    let a = buf[0];
+    let b = buf[0];
+    for (let i = buf.length - 1; i >= 0; i--) {
+      if (buf[i].t <= rt) {
+        a = buf[i];
+        b = buf[Math.min(i + 1, buf.length - 1)];
+        break;
+      }
+    }
+    const sa = a.s;
+    const sb = b.s;
+    let k = b.t > a.t ? (rt - a.t) / (b.t - a.t) : 0;
+    let extra = 0;
+    if (a === b) {
+      // ran out of snapshots: extrapolate a little with the last velocity
+      k = 0;
+      extra = Math.min(0.2, Math.max(0, rt - a.t));
+    }
+    k = THREE.MathUtils.clamp(k, 0, 1);
+    const L = (i: number) => sa[i] + (sb[i] - sa[i]) * k;
+    this.pos.set(L(0) + sa[7] * extra, L(1) + sa[8] * extra, L(2) + sa[9] * extra);
+    this.quat.set(sa[3], sa[4], sa[5], sa[6]).slerp(new THREE.Quaternion(sb[3], sb[4], sb[5], sb[6]), k).normalize();
+    this.vel.set(L(7), L(8), L(9));
+    this.angVel.set(L(10), L(11), L(12));
+    this.boost = sb[13];
+    const flags = sb[14];
+    this.boosting = !!(flags & FLAG_BOOST);
+    this.supersonic = !!(flags & FLAG_SUPERSONIC);
+    this.onGround = !!(flags & FLAG_GROUND);
+    this.wheelContacts = this.onGround ? 4 : 0;
+    this.controls.steer = sb[15];
+    const dead = !!(flags & FLAG_DEMOLISHED) || this.absent;
+    if (dead !== this.demolished) {
+      this.demolished = dead;
+      this.body.setEnabled(!dead);
+      this.group.visible = !dead;
+      if (this.nameTag) this.nameTag.visible = !dead;
+    }
+    const maxLen = CAR.suspensionRest + CAR.wheelRadius;
+    for (let i = 0; i < 4; i++) this.wheelDist[i] = this.onGround ? maxLen - 0.1 : maxLen;
+    this.updateAxes();
+    if (!dead) {
+      this.body.setNextKinematicTranslation({ x: this.pos.x, y: this.pos.y, z: this.pos.z });
+      this.body.setNextKinematicRotation({ x: this.quat.x, y: this.quat.y, z: this.quat.z, w: this.quat.w });
+    }
+  }
+
   /** One fixed physics step, executed before world.step(). */
   prePhysics(dt: number, time: number) {
     this.prevPos.copy(this.pos);
     this.prevQuat.copy(this.quat);
+    if (this.remote) {
+      this.remoteStep(performance.now() / 1000);
+      return;
+    }
     if (this.demolished) return;
     this.readState();
     const c = this.controls;

@@ -74,7 +74,7 @@ export const BALL = {
   drag: 0.03,
   mass: 0.18, // relative to car mass of 1
   /** Relative car-ball speed below which touches count as dribble touches (~600 uu/s). */
-  dribbleSpeed: 600 * UU,
+  dribbleSpeed: 450 * UU,
 };
 
 export const MATCH_LENGTH = 300; // seconds

@@ -6,6 +6,10 @@ import { Match, Mode, EndResult } from './game/Match';
 import type { Difficulty } from './game/AI';
 import { Garage } from './game/Garage';
 import { MenuNav } from './game/MenuNav';
+import { OnlineMenu } from './ui/Online';
+import { controlGuide, type Scheme } from './game/Input';
+
+const esc = (t: string) => t.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 
 async function boot() {
   await RAPIER.init();
@@ -47,9 +51,49 @@ async function boot() {
       seg.querySelectorAll('button').forEach((x) => x.classList.remove('sel'));
       b.classList.add('sel');
       if (seg.dataset.group === 'mode') mode = b.dataset.v as Mode;
-      else diff = b.dataset.v as Difficulty;
+      else if (seg.dataset.group === 'scheme') {
+        match.input.setScheme(b.dataset.v as Scheme);
+        renderControls();
+        match.hud.setBallCam(match.cam.ballCam, match.ballCamKey());
+      } else diff = b.dataset.v as Difficulty;
     });
   }
+
+  // controls table on the main menu follows the chosen scheme
+  const renderControls = () => {
+    const box = $('menu-controls');
+    box.replaceChildren();
+    const scheme = match.input.scheme;
+    const col = (title: string, rows: [string, string][], tip?: string) => {
+      const c = document.createElement('div');
+      c.className = 'col';
+      const h3 = document.createElement('h3');
+      h3.textContent = title;
+      const table = document.createElement('table');
+      for (const [k, v] of rows) {
+        const tr = table.insertRow();
+        tr.insertCell().textContent = k;
+        tr.insertCell().textContent = v;
+      }
+      c.append(h3, table);
+      if (tip) {
+        const p = document.createElement('p');
+        p.className = 'tip';
+        p.textContent = tip;
+        c.append(p);
+      }
+      box.append(c);
+    };
+    const extra: [string, string][] = [
+      ['[ ] / Wheel', 'Camera distance'],
+      ['H', 'Hide control guide'],
+      ['Esc', 'Pause'],
+    ];
+    col(scheme === 'rl' ? 'KEYBOARD + MOUSE (RL DEFAULT)' : 'KEYBOARD ONLY', [...controlGuide(scheme, false), ...extra], scheme === 'rl' ? 'These are Rocket League’s default PC bindings. Switch to “Keyboard only” to play without a mouse.' : 'No mouse needed, in matches or in menus (arrow keys + Enter).');
+    col('GAMEPAD (RL DEFAULT)', [...controlGuide(scheme, true), ['Start', 'Pause'], ['Back', 'Scoreboard']]);
+  };
+  for (const b of document.querySelectorAll<HTMLElement>('.seg[data-group="scheme"] button')) b.classList.toggle('sel', b.dataset.v === match.input.scheme);
+  renderControls();
 
   const blurActive = () => (document.activeElement as HTMLElement | null)?.blur();
   const startGame = () => {
@@ -66,9 +110,10 @@ async function boot() {
     menu.classList.remove('hidden');
   };
   $('play').addEventListener('click', startGame);
-  $('again').addEventListener('click', startGame);
-  $('tomenu').addEventListener('click', toMenu);
-  $('quit').addEventListener('click', toMenu);
+  let lastWasOnline = false;
+  $('again').addEventListener('click', () => (lastWasOnline ? backToOnline() : startGame()));
+  $('tomenu').addEventListener('click', () => (lastWasOnline ? (end.classList.add('hidden'), match.quit(), online.hide(), menu.classList.remove('hidden')) : toMenu()));
+  $('quit').addEventListener('click', () => (match.online ? backToOnline('You left the match.') : toMenu()));
   $('resume').addEventListener('click', () => {
     match.setPaused(false);
     pause.classList.add('hidden');
@@ -78,6 +123,31 @@ async function boot() {
     pause.classList.add('hidden');
     match.restart();
     blurActive();
+  });
+
+  // online play
+  const online = new OnlineMenu(
+    () => match.playerDesign,
+    (setup) => {
+      end.classList.add('hidden');
+      pause.classList.add('hidden');
+      match.startOnline(setup);
+      blurActive();
+    },
+    () => menu.classList.remove('hidden'),
+  );
+  const backToOnline = (message?: string) => {
+    pause.classList.add('hidden');
+    end.classList.add('hidden');
+    if (match.state !== 'idle') match.quit();
+    online.returnFromMatch();
+    if (message) setTimeout(() => ($('on-status').textContent = message), 50);
+  };
+  online.onDisconnect = (reason) => backToOnline(reason);
+  match.onAbort = (reason) => backToOnline(reason);
+  $('open-online').addEventListener('click', () => {
+    menu.classList.add('hidden');
+    void online.show();
   });
 
   // garage
@@ -116,13 +186,18 @@ async function boot() {
   });
   match.onPauseToggle = (p) => {
     pause.classList.toggle('hidden', !p);
+    $('restart').classList.toggle('hidden', !!match.online);
+    $('pause-note').classList.toggle('hidden', !match.online);
     if (p) syncSettings();
   };
 
   match.onEnd = (r: EndResult) => {
-    const playerTeam = 0;
+    lastWasOnline = !!r.online;
+    $('again').textContent = r.online ? 'BACK TO ONLINE' : 'PLAY AGAIN';
+    const playerTeam = r.cars.find((c) => c.isPlayer)?.team ?? 0;
     $('end-title').textContent = r.winner === playerTeam ? 'VICTORY!' : 'DEFEAT';
     $('end-title').className = r.winner === 0 ? 'b' : 'o';
+    $('end-note').textContent = r.online ? 'Online result saved to the leaderboard.' : '';
     $('end-blue').textContent = String(r.score[0]);
     $('end-orange').textContent = String(r.score[1]);
     const rows = [...r.cars].sort((a, b) => a.team - b.team || b.score - a.score);
@@ -131,7 +206,7 @@ async function boot() {
       rows
         .map(
           (c) =>
-            `<tr class="t${c.team} ${c.isPlayer ? 'me' : ''}"><td>${c.name}</td><td>${c.score}</td><td>${c.goals}</td><td>${c.assists}</td><td>${c.saves}</td><td>${c.shots}</td><td>${c.demos}</td></tr>`,
+            `<tr class="t${c.team} ${c.isPlayer ? 'me' : ''}"><td>${esc(c.name)}</td><td>${c.score}</td><td>${c.goals}</td><td>${c.assists}</td><td>${c.saves}</td><td>${c.shots}</td><td>${c.demos}</td></tr>`,
         )
         .join('');
     end.classList.remove('hidden');
@@ -158,6 +233,7 @@ async function boot() {
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
     nav.pollGamepad(dt);
+    if (online.open) online.tick();
     if (garage.open) {
       garage.render(renderer, dt);
     } else {

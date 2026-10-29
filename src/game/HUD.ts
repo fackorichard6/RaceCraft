@@ -43,6 +43,8 @@ export class HUD {
   private guideList: HTMLElement;
   private hint: HTMLElement;
   private ssBadge: HTMLElement;
+  private board: HTMLElement;
+  private boardKey = '';
   private lastBoost = -1;
   private lastBoosting = false;
   private centerTimer = 0;
@@ -88,11 +90,38 @@ export class HUD {
     this.indicator = el('div', 'ball-indicator hidden', this.root, '<div class="arrow"></div>');
     this.replayTag = el('div', 'replay hidden', this.root, '<span class="dot"></span> REPLAY <small>Jump to skip</small>');
     this.feed = el('div', 'feed', this.root);
+    this.board = el('div', 'board hidden', this.root);
     this.renderGuide(false, 'rl');
   }
 
   show(v: boolean) {
     this.root.classList.toggle('hidden', !v);
+  }
+
+  /** Tab scoreboard (rows are rendered with textContent: names come from other players). */
+  showScoreboard(on: boolean, rows: { name: string; team: number; score: number; goals: number; assists: number; saves: number; shots: number; absent?: boolean }[]) {
+    this.board.classList.toggle('hidden', !on);
+    if (!on) return;
+    const key = JSON.stringify(rows);
+    if (key === this.boardKey) return;
+    this.boardKey = key;
+    this.board.replaceChildren();
+    for (const team of [0, 1]) {
+      const table = document.createElement('table');
+      table.className = `board-team t${team}`;
+      const head = table.insertRow();
+      for (const h of [team === 0 ? 'BLUE' : 'ORANGE', 'SCORE', 'GOALS', 'ASSISTS', 'SAVES', 'SHOTS']) {
+        const th = document.createElement('th');
+        th.textContent = h;
+        head.appendChild(th);
+      }
+      for (const r of rows.filter((x) => x.team === team).sort((a, b) => b.score - a.score)) {
+        const tr = table.insertRow();
+        if (r.absent) tr.className = 'gone';
+        for (const v of [r.name, r.score, r.goals, r.assists, r.saves, r.shots]) tr.insertCell().textContent = String(v);
+      }
+      this.board.appendChild(table);
+    }
   }
 
   toggleGuide() {
